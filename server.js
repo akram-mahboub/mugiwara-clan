@@ -3,6 +3,8 @@ require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
+const path = require("path");
+
 
 const app = express();
 
@@ -13,6 +15,30 @@ app.use(cors());
 const PORT = process.env.PORT || 5000;
 const API_KEY = process.env.API_KEY;
 
+
+// Serve static frontend files
+app.use(express.static(path.join(__dirname, "public")));
+
+/* // Optional: make "/" go to home.html automatically
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "home.html"));
+}); */
+
+
+// Load keys into an array
+const cocKeys = [
+  process.env.API_KEY_1,
+  process.env.API_KEY_2,
+  process.env.API_KEY_3,
+];
+
+// Simple round-robin rotation
+let keyIndex = 0;
+function getNextKey() {
+  const key = cocKeys[keyIndex];
+  keyIndex = (keyIndex + 1) % cocKeys.length;
+  return key;
+}
 
 
 
@@ -26,7 +52,7 @@ app.get("/clan/:tag", async (req, res) => {
       `https://api.clashofclans.com/v1/clans/${tag}`,
       {
         headers: {
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${getNextKey()}`,
         },
       }
     );
@@ -45,7 +71,7 @@ app.get("/clan/:tag/members", async (req, res) => {
       `https://api.clashofclans.com/v1/clans/${tag}/members`,
       {
         headers: {
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${getNextKey()}`,
           
         },
       }
@@ -65,7 +91,7 @@ app.get("/clan/:tag/currentwar", async (req, res) => {
       `https://api.clashofclans.com/v1/clans/${tag}/currentwar`,
       {
         headers: {
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${getNextKey()}`,
         },
       }
     );
@@ -86,7 +112,7 @@ app.get("/clan/:tag/capitalraidseasons", async (req, res) => {
       `https://api.clashofclans.com/v1/clans/${tag}/capitalraidseasons`,
       {
         headers: {
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${getNextKey()}`,
           
         },
       }
