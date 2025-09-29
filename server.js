@@ -13,7 +13,6 @@ app.use(cors());
 
 // Clash of Clans API key (keep it secret, don’t expose in frontend!)
 const PORT = process.env.PORT || 5000;
-const API_KEY = process.env.API_KEY;
 
 
 // Serve static frontend files
@@ -128,4 +127,5 @@ app.get("/clan/:tag/capitalraidseasons", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+
 });
