@@ -1,6 +1,6 @@
 // ============================================
-// CLASH OF CLANS API SERVER - SINGLE KEY VERSION
-// One API key with multiple IPs whitelisted
+// CLASH OF CLANS API SERVER
+// The Mugiwara Clan Website Backend
 // ============================================
 
 const express = require('express');
@@ -15,23 +15,27 @@ const PORT = process.env.PORT || 5000;
 // Initialize cache (5 minutes TTL)
 const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
-// CORS configuration
-app.use(cors());
+// CORS configuration - Allow all origins
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // ============================================
 // CONFIGURATION
 // ============================================
 
-// Single API key (you'll add multiple IPs to it in CoC developer portal)
 const API_KEY = process.env.COC_API_KEY;
-
-// Clash of Clans API base URL
 const COC_API_BASE = 'https://api.clashofclans.com/v1';
 
 // Validate API key exists
 if (!API_KEY) {
   console.error('❌ ERROR: COC_API_KEY is not set in environment variables!');
+  console.error('Set it in Render Dashboard → Environment tab');
   process.exit(1);
 }
 
@@ -48,6 +52,8 @@ async function cocApiCall(endpoint) {
   const url = `${COC_API_BASE}${endpoint}`;
   
   try {
+    console.log(`📡 Calling: ${endpoint}`);
+    
     const response = await axios.get(url, {
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
@@ -56,6 +62,7 @@ async function cocApiCall(endpoint) {
       timeout: 10000
     });
     
+    console.log(`✅ Success: ${endpoint}`);
     return { success: true, data: response.data };
     
   } catch (error) {
@@ -65,13 +72,13 @@ async function cocApiCall(endpoint) {
       
       console.error(`❌ API Error [${status}]: ${message}`);
       
-      // Handle different error types
       if (status === 403) {
         return {
           success: false,
           status: 403,
           error: 'IP not whitelisted. Add your server IP to this API key in CoC developer portal.',
-          details: message
+          details: message,
+          hint: 'Visit /myip endpoint to get your current IP'
         };
       } else if (status === 404) {
         return {
@@ -104,7 +111,6 @@ async function cocApiCall(endpoint) {
       };
     }
     
-    // Network or timeout error
     return {
       success: false,
       status: 0,
@@ -125,7 +131,7 @@ async function cachedCoCApiCall(endpoint, cacheKey) {
     return { success: true, data: cached, fromCache: true };
   }
   
-  console.log(`🔄 Cache miss, fetching: ${endpoint}`);
+  console.log(`🔄 Cache miss: ${cacheKey}`);
   
   // Make API call
   const result = await cocApiCall(endpoint);
@@ -133,11 +139,34 @@ async function cachedCoCApiCall(endpoint, cacheKey) {
   // Cache successful responses
   if (result.success) {
     cache.set(cacheKey, result.data);
-    console.log(`✅ Cached: ${cacheKey}`);
+    console.log(`💾 Cached: ${cacheKey}`);
   }
   
   return result;
 }
+
+// ============================================
+// ROOT ENDPOINT
+// ============================================
+
+app.get('/', (req, res) => {
+  res.json({
+    message: 'The Mugiwara Clan API Server',
+    version: '2.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      myip: '/myip',
+      clan: '/clan/:clanTag',
+      members: '/clan/:clanTag/members',
+      currentWar: '/clan/:clanTag/currentwar',
+      cwl: '/clan/:clanTag/currentwar/leaguegroup',
+      raids: '/clan/:clanTag/capitalraidseasons',
+      player: '/player/:playerTag'
+    },
+    documentation: 'Visit /health for server status'
+  });
+});
 
 // ============================================
 // UTILITY ENDPOINTS
@@ -150,6 +179,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    apiKeyConfigured: !!API_KEY,
     cache: {
       keys: cache.keys().length,
       stats: cache.getStats()
@@ -158,11 +189,10 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * Get server's public IP (helpful for whitelisting)
+ * Get server's public IP
  */
 app.get('/myip', async (req, res) => {
   try {
-    // Try multiple IP detection services
     const services = [
       'https://api.ipify.org?format=json',
       'https://api.my-ip.io/ip.json',
@@ -177,7 +207,15 @@ app.get('/myip', async (req, res) => {
         return res.json({
           ip: ip,
           message: 'Add this IP to your API key in CoC developer portal',
-          url: 'https://developer.clashofclans.com/#/account'
+          url: 'https://developer.clashofclans.com/#/account',
+          instructions: [
+            '1. Go to the URL above',
+            '2. Edit your API key',
+            '3. Add this IP: ' + ip,
+            '4. Save changes',
+            '5. Wait 1-2 minutes',
+            '6. Your API will work!'
+          ]
         });
       } catch (err) {
         continue;
@@ -222,7 +260,8 @@ app.get('/clan/:clanTag', async (req, res) => {
     } else {
       res.status(result.status || 500).json({
         error: result.error,
-        details: result.details
+        details: result.details,
+        hint: result.hint
       });
     }
   } catch (error) {
@@ -247,7 +286,8 @@ app.get('/clan/:clanTag/members', async (req, res) => {
     } else {
       res.status(result.status || 500).json({
         error: result.error,
-        details: result.details
+        details: result.details,
+        hint: result.hint
       });
     }
   } catch (error) {
@@ -279,7 +319,8 @@ app.get('/clan/:clanTag/currentwar', async (req, res) => {
     } else {
       res.status(result.status || 500).json({
         error: result.error,
-        details: result.details
+        details: result.details,
+        hint: result.hint
       });
     }
   } catch (error) {
@@ -307,7 +348,8 @@ app.get('/clan/:clanTag/currentwar/leaguegroup', async (req, res) => {
     } else {
       res.status(result.status || 500).json({
         error: result.error,
-        details: result.details
+        details: result.details,
+        hint: result.hint
       });
     }
   } catch (error) {
@@ -336,7 +378,8 @@ app.get('/clan/:clanTag/capitalraidseasons', async (req, res) => {
     } else {
       res.status(result.status || 500).json({
         error: result.error,
-        details: result.details
+        details: result.details,
+        hint: result.hint
       });
     }
   } catch (error) {
@@ -365,7 +408,8 @@ app.get('/player/:playerTag', async (req, res) => {
     } else {
       res.status(result.status || 500).json({
         error: result.error,
-        details: result.details
+        details: result.details,
+        hint: result.hint
       });
     }
   } catch (error) {
@@ -375,38 +419,74 @@ app.get('/player/:playerTag', async (req, res) => {
 });
 
 // ============================================
+// ERROR HANDLING
+// ============================================
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Endpoint not found',
+    path: req.path,
+    availableEndpoints: {
+      root: '/',
+      health: '/health',
+      myip: '/myip',
+      clan: '/clan/:clanTag',
+      members: '/clan/:clanTag/members',
+      currentWar: '/clan/:clanTag/currentwar',
+      cwl: '/clan/:clanTag/currentwar/leaguegroup',
+      raids: '/clan/:clanTag/capitalraidseasons',
+      player: '/player/:playerTag'
+    }
+  });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: err.message
+  });
+});
+
+// ============================================
 // START SERVER
 // ============================================
 
 app.listen(PORT, () => {
   console.log('\n🚀 ========================================');
-  console.log('   Clash of Clans API Server - RUNNING');
+  console.log('   The Mugiwara Clan API Server');
   console.log('   ========================================');
   console.log(`   📍 Server: http://localhost:${PORT}`);
-  console.log(`   🔑 API Key: ${API_KEY.substring(0, 20)}...`);
+  console.log(`   🔑 API Key: ${API_KEY ? API_KEY.substring(0, 20) + '...' : 'NOT SET'}`);
   console.log('   ========================================');
   console.log('\n📖 Available Endpoints:');
-  console.log('   GET  /health');
-  console.log('   GET  /myip');
-  console.log('   POST /cache/clear');
-  console.log('   GET  /clan/:clanTag');
-  console.log('   GET  /clan/:clanTag/members');
-  console.log('   GET  /clan/:clanTag/currentwar');
-  console.log('   GET  /clan/:clanTag/currentwar/leaguegroup');
-  console.log('   GET  /clan/:clanTag/capitalraidseasons');
-  console.log('   GET  /player/:playerTag');
-  console.log('\n💡 Setup Instructions:');
-  console.log('   1. Go to https://developer.clashofclans.com/');
-  console.log('   2. Edit your API key');
-  console.log('   3. Add ALL your server IPs (check /myip endpoint)');
-  console.log('   4. You can add up to 4 IPs to one key!');
-  console.log('\n✅ Ready to serve requests!\n');
+  console.log('   GET  /                  - API info');
+  console.log('   GET  /health            - Server health');
+  console.log('   GET  /myip              - Get server IP');
+  console.log('   POST /cache/clear       - Clear cache');
+  console.log('   GET  /clan/:tag         - Clan info');
+  console.log('   GET  /clan/:tag/members - Clan members');
+  console.log('   GET  /clan/:tag/currentwar - Current war');
+  console.log('   GET  /clan/:tag/currentwar/leaguegroup - CWL');
+  console.log('   GET  /clan/:tag/capitalraidseasons - Raids');
+  console.log('   GET  /player/:tag       - Player info');
+  console.log('\n💡 Next Steps:');
+  console.log('   1. Visit /myip to get your server IP');
+  console.log('   2. Add IP to CoC API key at:');
+  console.log('      https://developer.clashofclans.com/');
+  console.log('   3. Test: /clan/2L0QRVR2V');
+  console.log('\n✅ Server is ready!\n');
 });
 
-// Handle graceful shutdown
+// Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  app.close(() => {
-    console.log('HTTP server closed');
-  });
+  console.log('SIGTERM signal received: closing server');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing server');
+  process.exit(0);
 });
